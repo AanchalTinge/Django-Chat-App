@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with {{ receiver.username }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .chat-log {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #e1f5fe;
+        }
+        .message-sender {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .message-timestamp {
+            font-size: 0.8em;
+            color: #666;
+            margin-left: 10px;
+        }
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .chat-input button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .chat-input button:hover {
+            background-color: #0056b3;
+        }
+        #typing-indicator {
+            font-style: italic;
+            color: #666;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h2>Chat with {{ receiver.username }}</h2>
+        <div id="chat-log" class="chat-log">
+            {% for message in messages %}
+                <div class="message">
+                    <span class="message-sender">{{ message.sender.username }}:</span>
+                    <span class="message-content">{{ message.message }}</span>
+                    <span class="message-timestamp">{{ message.timestamp|date:"H:i" }}</span>
+                </div>
+            {% endfor %}
+        </div>
+        <div id="typing-indicator" class="text-muted"></div>
+        <div class="chat-input">
+            <input type="text" id="chat-message-input" class="form-control" placeholder="Type your message...">
+            <button id="chat-message-submit" class="btn btn-primary">Send</button>
+        </div>
+    </div>
+
+    <!-- WebSocket Script -->
+    <script>
+        const chatSocket = new WebSocket(
+            'ws://' + window.location.host + '/ws/chat/' + '{{ receiver.id }}/'
+        );
+
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        // Handle typing events
+        document.querySelector('#chat-message-input').oninput = function (e) {
+            chatSocket.send(JSON.stringify({
+                'type': 'typing',
+                'sender': '{{ request.user.username }}',
+                'receiver': '{{ receiver.username }}',
+            }));
+        };
+
+        // Handle incoming messages
+        chatSocket.onmessage = function (e) {
+            const data = JSON.parse(e.data);
+
+            if (data.type === 'typing') {
+                // Display typing indicator
+                typingIndicator.textContent = `${data.sender} is typing...`;
+                setTimeout(() => {
+                    typingIndicator.textContent = '';
+                }, 2000);
+            } else {
+                // Display the message in the chat log
+                const message = data.message;
+                const sender = data.sender;
+                const receiver = data.receiver;
+
+                const chatLog = document.querySelector('#chat-log');
+                chatLog.innerHTML += `<div class="message">
+                    <span class="message-sender">${sender}:</span>
+                    <span class="message-content">${message}</span>
+                    <span class="message-timestamp">${new Date().toLocaleTimeString()}</span>
+                </div>`;
+
+                // Scroll to the bottom of the chat log
+                chatLog.scrollTop = chatLog.scrollHeight;
+            }
+        };
+
+        // Handle WebSocket connection close
+        chatSocket.onclose = function (e) {
+            console.error('Chat socket closed unexpectedly');
+        };
+
+        // Send message on Enter key
+        document.querySelector('#chat-message-input').onkeyup = function (e) {
+            if (e.keyCode === 13) {  // Enter key
+                sendMessage();
+            }
+        };
+
+        // Send message on button click
+        document.querySelector('#chat-message-submit').onclick = function (e) {
+            sendMessage();
+        };
+
+        // Function to send a message
+        function sendMessage() {
+            const messageInput = document.querySelector('#chat-message-input');
+            const message = messageInput.value;
+
+            chatSocket.send(JSON.stringify({
+                'message': message,
+                'sender': '{{ request.user.username }}',
+                'receiver': '{{ receiver.username }}',
+            }));
+
+            // Clear the input field
+            messageInput.value = '';
+
+            
+        }
+    </script>
+</body>
+</html>
